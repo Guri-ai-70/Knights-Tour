@@ -109,6 +109,11 @@ svg.path polyline,svg.path line{stroke:var(--path);stroke-width:.05;fill:none;st
 .forbid p{color:#fff;font-size:17px;max-width:420px;margin:0;line-height:1.45;text-shadow:0 2px 6px rgba(0,0,0,.6)}
 .forbid small{color:#ddd;margin-top:14px;font-size:13px}
 
+.toast{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%) scale(.85);opacity:0;pointer-events:none;z-index:70;
+  background:#2d7d46;color:#fff;font-weight:800;font-size:clamp(20px,6vw,28px);padding:16px 26px;border-radius:16px;
+  box-shadow:0 12px 30px rgba(0,0,0,.35);transition:opacity .2s,transform .2s;text-align:center;white-space:nowrap}
+.toast.warn{background:#b8741a}
+.toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .win h2{font-size:30px;text-align:center}
 .win p{text-align:center;font-size:16px;margin:0 0 6px}
 </style>
@@ -177,6 +182,8 @@ svg.path polyline,svg.path line{stroke:var(--path);stroke-width:.05;fill:none;st
     <div class="row"><button class="btn primary" id="winNew">New game</button><button class="btn" id="winClose">Close</button></div>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status"></div>
 
 <!-- Forbidden -->
 <div class="forbid" id="forbid">
@@ -365,6 +372,7 @@ function tone(freq, dur, type, vol, delay = 0) {
 }
 const sndBuzz = () => { tone(110, 0.55, "sawtooth", 0.28); tone(82, 0.55, "square", 0.18); tone(110, 0.35, "sawtooth", 0.22, 0.6); };
 const sndTick = () => tone(740, 0.08, "triangle", 0.18);
+const sndStart = () => [392, 523, 659].forEach((f, i) => tone(f, 0.22, "triangle", 0.2, i * 0.09));
 const sndWin  = () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.35, "triangle", 0.22, i * 0.13));
 
 /* ---------- Settings ---------- */
@@ -460,7 +468,7 @@ function renderControls() {
   };
   if (S.phase === "setup") {
     add("Clear", clearSetup, false, placedCount() === 0);
-    add("Start", startGame, true, placedCount() !== S.count);
+    add("Start", startGame, true);
   } else if (S.phase === "play") {
     add("Undo", undo, false, S.history.length === 0);
     add("New game", newGame);
@@ -471,6 +479,16 @@ function renderControls() {
 }
 
 function notice(msg, warn) { const n = $("notice"); n.textContent = msg || ""; n.classList.toggle("warn", !!warn); }
+
+/* ---------- Toast banner ---------- */
+let toastTimer = null;
+function toast(msg, warn) {
+  const t = $("toast"); t.textContent = msg; t.classList.toggle("warn", !!warn);
+  t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+  if (warn) sndWarn();
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+const sndWarn = () => tone(330, 0.18, "triangle", 0.2);
 
 /* ---------- Forbidden ---------- */
 let forbidTimer = null;
@@ -572,6 +590,9 @@ $("padRemove").onclick = () => {
 $("padCancel").onclick = () => closeModal("pad");
 
 function startGame() {
+  const have = placedCount(), need = S.count - have;
+  if (need > 0) { toast(`Place ${need} more number${need > 1 ? "s" : ""} first`, true); notice(`Tap a square and type a number — ${have} of ${S.count} placed.`, true); return; }
+  if (need < 0) { toast(`Remove ${-need} number${-need > 1 ? "s" : ""} first`, true); notice(`You chose ${S.count} numbers but placed ${have}. Tap one to remove it.`, true); return; }
   notice("Checking your numbers…");
   setTimeout(() => {
     const res = solveTour(S.fixed);
@@ -586,8 +607,9 @@ function startGame() {
     for (const k in S.fixed) setCell(S.fixed[k], +k);
     S.phase = "play"; S.start = Date.now();
     clearInterval(S.timerId); S.timerId = setInterval(() => { const t = $("time"); if (t) t.textContent = fmtTime(Date.now() - S.start); }, 1000);
-    notice("Good luck! Your numbers are fixed in red.");
+    notice("Tap any empty square and type its number. Red numbers are fixed.");
     render();
+    toast("Game started!"); sndStart();
   }, 30);
 }
 
