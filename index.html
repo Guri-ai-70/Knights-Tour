@@ -122,12 +122,20 @@ svg.path polyline,svg.path line{stroke:var(--path);stroke-width:.05;fill:none;st
 .sw.on{background:#2d7d46}.sw.on::after{left:25px}
 
 /* Forbidden */
-.forbid{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px;text-align:center;cursor:pointer}
-.forbid.open{display:flex}
-.forbid svg{width:min(70vw,340px);height:min(70vw,340px);filter:drop-shadow(0 6px 16px rgba(0,0,0,.5))}
-.forbid svg line{stroke:var(--x);stroke-width:22;stroke-linecap:round;stroke-dasharray:400;stroke-dashoffset:400;animation:draw .28s ease-out forwards}
-.forbid svg line:nth-child(2){animation-delay:.18s}
-@keyframes draw{to{stroke-dashoffset:0}}
+.forbid{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px;text-align:center;cursor:pointer;
+  visibility:hidden;opacity:0;pointer-events:none;transition:opacity .18s ease-in,visibility 0s linear .18s}
+.forbid.open{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .15s ease-out}
+.forbid svg{width:min(70vw,340px);height:min(70vw,340px);filter:drop-shadow(0 6px 16px rgba(0,0,0,.5));transform:scale(.8);transition:transform .18s ease-in}
+.forbid.open svg{transform:none;transition:transform .22s cubic-bezier(.2,.9,.25,1)}
+/* strokes rest fully drawn, so the X stays whole while the overlay fades out */
+.forbid svg line{stroke:var(--x);stroke-width:22;stroke-linecap:round;stroke-dasharray:400;stroke-dashoffset:0}
+.forbid.open svg line{animation:draw .1s ease-out backwards}
+.forbid.open svg line:nth-child(2){animation-delay:.07s}
+@keyframes draw{from{stroke-dashoffset:400}}
+@media (prefers-reduced-motion:reduce){
+  .forbid svg,.forbid.open svg{transform:none;transition:none}
+  .forbid.open svg line{animation:none}
+}
 .forbid h3{color:#fff;font-size:clamp(34px,10vw,56px);margin:6px 0 6px;letter-spacing:4px;font-family:Georgia,serif;text-shadow:0 3px 10px rgba(0,0,0,.6)}
 .forbid p{color:#fff;font-size:17px;max-width:420px;margin:0;line-height:1.45;text-shadow:0 2px 6px rgba(0,0,0,.6)}
 .forbid small{color:#ddd;margin-top:14px;font-size:13px}
@@ -542,11 +550,15 @@ let forbidTimer = null;
 function forbid(reason, sq) {
   $("forbidText").textContent = reason;
   const f = $("forbid"); f.classList.remove("open"); void f.offsetWidth; f.classList.add("open");
-  sndBuzz();
+  sndBuzz(); if (navigator.vibrate) navigator.vibrate([40, 40, 60]);
   if (sq >= 0) { cells[sq].classList.remove("shake"); void cells[sq].offsetWidth; cells[sq].classList.add("shake"); }
   clearTimeout(forbidTimer); forbidTimer = setTimeout(() => f.classList.remove("open"), 3200);
 }
 $("forbid").onclick = () => { clearTimeout(forbidTimer); $("forbid").classList.remove("open"); };
+document.addEventListener("keydown", e => {   // any key dismisses (not held keys or bare modifiers)
+  if (e.repeat || ["Shift", "Control", "Alt", "Meta"].includes(e.key) || !$("forbid").classList.contains("open")) return;
+  $("forbid").onclick();
+});
 
 /* ---------- Setup phase ---------- */
 function setCount(c) {
