@@ -44,8 +44,10 @@ body{
 header{width:100%;max-width:560px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(26px,7vw,38px);margin:4px 0 2px;letter-spacing:.5px}
 .tagline{margin:0;color:var(--muted);font-size:15px}
-.gear{background:none;border:0;color:var(--text);font-size:30px;line-height:1;cursor:pointer;padding:6px;border-radius:10px}
+.gear{background:none;border:0;color:var(--text);font-size:30px;line-height:1;cursor:pointer;padding:6px;border-radius:10px;touch-action:manipulation;transition:transform .3s cubic-bezier(.2,.9,.25,1),background .15s}
 .gear:hover{background:var(--btn2)}
+.gear:active{transform:scale(.9);transition-duration:.05s}
+body:has(#settings.open) .gear{transform:rotate(60deg)}
 
 .status{width:100%;max-width:560px;margin:14px 0 10px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;font-size:15px;min-height:36px}
 .status b{font-size:18px}
@@ -123,9 +125,22 @@ svg.path line.out{opacity:0}
 .row{display:flex;gap:8px;margin-top:12px}
 .row .btn{flex:1;min-width:0}
 .toggle{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--panel-border);font-size:17px}
-.sw{position:relative;width:52px;height:30px;border-radius:15px;background:#9b8b78;border:0;cursor:pointer;transition:background .2s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .2s}
-.sw.on{background:#2d7d46}.sw.on::after{left:25px}
+.sw{position:relative;width:52px;height:30px;border-radius:15px;background:#9b8b78;border:0;cursor:pointer;transition:background .2s;touch-action:manipulation}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:transform .26s cubic-bezier(.2,.9,.25,1),width .12s ease-out}
+.sw:active::after{width:28px}
+.sw.on{background:#2d7d46}.sw.on::after{transform:translateX(22px)}
+.sw.on:active::after{transform:translateX(18px)}
+/* settings panel: fade + scale from the gear, same path in and out */
+#settings.modal{display:flex;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .18s ease-in,visibility 0s linear .18s}
+#settings.modal.open{visibility:visible;opacity:1;pointer-events:auto;transition:opacity .15s ease-out}
+#settings .sheet{transform:scale(.88);transform-origin:var(--ox,50%) var(--oy,50%);transition:transform .18s ease-in}
+#settings.open .sheet{transform:none;transition:transform .26s cubic-bezier(.2,.9,.25,1)}
+/* night mode eases instead of flashing (class is only on during the toggle) */
+body.theming *:not(.sw),body.theming *:not(.sw)::before,body.theming *:not(.sw)::after{transition:background-color .28s ease,color .28s ease,border-color .28s ease,stroke .28s ease,box-shadow .28s ease!important}
+@media (prefers-reduced-motion:reduce){
+  #settings .sheet,#settings.open .sheet{transform:none;transition:none}
+  body:has(#settings.open) .gear,.gear:active{transform:none}
+}
 
 /* Forbidden */
 .forbid{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.78);padding:20px;text-align:center;cursor:pointer;
@@ -194,8 +209,8 @@ svg.path line.out{opacity:0}
 <div class="modal" id="settings">
   <div class="sheet">
     <h2>Settings</h2>
-    <div class="toggle"><span>Night mode</span><button class="sw" id="swNight" aria-label="Night mode"></button></div>
-    <div class="toggle"><span>Sound</span><button class="sw" id="swSound" aria-label="Sound"></button></div>
+    <div class="toggle"><span>Night mode</span><button class="sw" id="swNight" role="switch" aria-checked="false" aria-label="Night mode"></button></div>
+    <div class="toggle"><span>Sound</span><button class="sw" id="swSound" role="switch" aria-checked="false" aria-label="Sound"></button></div>
     <div class="row"><button class="btn primary" id="setDone">Done</button></div>
   </div>
 </div>
@@ -421,6 +436,7 @@ function applySettings() {
   document.body.classList.toggle("night", settings.night);
   $("swNight").classList.toggle("on", settings.night);
   $("swSound").classList.toggle("on", settings.sound);
+  $("swNight").setAttribute("aria-checked", settings.night); $("swSound").setAttribute("aria-checked", settings.sound);
   document.querySelector('meta[name="theme-color"]').content = settings.night ? "#14100c" : "#3a2718";
 }
 
@@ -750,9 +766,25 @@ function newGame() {
 /* ---------- Modals & settings wiring ---------- */
 function openModal(id) { $(id).classList.add("open"); }
 function closeModal(id) { $(id).classList.remove("open"); }
-$("gearBtn").onclick = () => openModal("settings");
+$("gearBtn").onclick = () => {
+  // grow the sheet out of the gear
+  const r = $("gearBtn").getBoundingClientRect(), sh = document.querySelector("#settings .sheet"), de = document.documentElement;
+  const left = (de.clientWidth - sh.offsetWidth) / 2, top = (de.clientHeight - sh.offsetHeight) / 2;
+  $("settings").style.setProperty("--ox", (r.left + r.width / 2 - left) + "px");
+  $("settings").style.setProperty("--oy", (r.top + r.height / 2 - top) + "px");
+  openModal("settings");
+};
+// focus goes into the panel on open and back to the gear on close, however it closes
+new MutationObserver(() => {
+  if ($("settings").classList.contains("open")) $("setDone").focus({ preventScroll: true });
+  else $("gearBtn").focus({ preventScroll: true });
+}).observe($("settings"), { attributes: true, attributeFilter: ["class"] });
 $("setDone").onclick = () => closeModal("settings");
-$("swNight").onclick = () => { settings.night = !settings.night; saveSettings(); applySettings(); };
+let themeTimer = null;
+$("swNight").onclick = () => {
+  document.body.classList.add("theming"); clearTimeout(themeTimer); themeTimer = setTimeout(() => document.body.classList.remove("theming"), 350);
+  settings.night = !settings.night; saveSettings(); applySettings();
+};
 $("swSound").onclick = () => { settings.sound = !settings.sound; saveSettings(); applySettings(); if (settings.sound) sndTick(); };
 $("confShow").onclick = showSolution;
 $("confCancel").onclick = () => closeModal("confirm");
