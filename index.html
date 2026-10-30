@@ -82,6 +82,12 @@ h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(26px,7vw,38px);ma
 @media (prefers-reduced-motion:reduce){.cell>span,.cell.press>span{transition:none}.cell.press>span{scale:1}}
 svg.path{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
 svg.path polyline,svg.path line{stroke:var(--path);stroke-width:.05;fill:none;stroke-linecap:round;stroke-linejoin:round}
+/* segments are drawn from n toward n+1 (pathLength=1); the offset starts just past the end so no cap dot shows early */
+svg.path line{stroke-dasharray:1 2;stroke-dashoffset:0;transition:opacity .15s ease-out}
+svg.path line.draw{animation:linedraw .16s ease-out backwards}
+svg.path line.out{opacity:0}
+@keyframes linedraw{from{stroke-dashoffset:1.05}}
+@media (prefers-reduced-motion:reduce){svg.path line.draw{animation:none}}
 
 .controls{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;justify-content:center}
 .btn{border:0;border-radius:12px;padding:12px 20px;font-size:16px;font-weight:700;cursor:pointer;background:var(--btn2);color:var(--btn2-text);min-width:100px}
@@ -473,6 +479,21 @@ document.addEventListener("pointercancel", e => {
 const center = s => [(s % 8) + 0.5, 7 - (s >> 3) + 0.5];
 
 /* ---------- Rendering ---------- */
+/* One <line> per segment, kept between renders: new ones draw in, removed ones fade out. */
+const pathLines = new Map();
+function syncPath(want) {
+  const svg = $("pathSvg");
+  for (const [k, el] of pathLines) if (!want.has(k)) {
+    pathLines.delete(k); el.classList.add("out"); setTimeout(() => el.remove(), 180);
+  }
+  for (const [k, [a, b]] of want) if (!pathLines.has(k)) {
+    const [x1, y1] = center(a), [x2, y2] = center(b);
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    el.setAttribute("x1", x1); el.setAttribute("y1", y1); el.setAttribute("x2", x2); el.setAttribute("y2", y2);
+    el.setAttribute("pathLength", "1"); el.setAttribute("class", "draw");
+    svg.appendChild(el); pathLines.set(k, el);
+  }
+}
 function render(popSq = -1) {
   const fixedAt = {}; for (const k in S.fixed) fixedAt[S.fixed[k]] = +k;
   for (let s = 0; s < 64; s++) {
@@ -483,12 +504,12 @@ function render(popSq = -1) {
     else el.innerHTML = "";
   }
   // path lines between consecutive numbers that are both on the board
-  let lines = "";
-  for (let n = 1; n < 64; n++) {
+  const want = new Map();
+  if (S.phase === "play" || (S.phase === "solved" && S.animating)) for (let n = 1; n < 64; n++) {
     const a = S.posOf[n], b = S.posOf[n + 1];
-    if (a >= 0 && b >= 0 && (S.phase === "play" || (S.phase === "solved" && S.animating))) { const [x1, y1] = center(a), [x2, y2] = center(b); lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`; }
+    if (a >= 0 && b >= 0) want.set(`${n}:${a}:${b}`, [a, b]);
   }
-  $("pathSvg").innerHTML = lines;
+  syncPath(want);
   renderStatus(); renderControls();
 }
 
