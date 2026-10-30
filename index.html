@@ -74,6 +74,12 @@ h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(26px,7vw,38px);ma
 @keyframes pop{from{transform:scale(.4);opacity:.2}to{transform:scale(1);opacity:1}}
 .cell.shake{animation:shake .35s}
 @keyframes shake{20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+/* press feedback: tint + number presses in the moment the pointer goes down */
+.cell{touch-action:manipulation;transition:box-shadow .12s ease-out}
+.cell>span{transition:scale .12s ease-out}
+.cell.press{box-shadow:inset 0 0 0 100px rgba(0,0,0,.16);transition-duration:0s}
+.cell.press>span{scale:.9;transition-duration:.05s}
+@media (prefers-reduced-motion:reduce){.cell>span,.cell.press>span{transition:none}.cell.press>span{scale:1}}
 svg.path{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
 svg.path polyline,svg.path line{stroke:var(--path);stroke-width:.05;fill:none;stroke-linecap:round;stroke-linejoin:round}
 
@@ -426,13 +432,36 @@ const cells = [];
     const s = (7 - r) * 8 + c, el = document.createElement("div");
     el.className = "cell " + (isDarkSq(s) ? "d" : "l");
     el.dataset.sq = s; el.title = sqName(s);
-    el.addEventListener("click", () => onCell(s));
+    el.addEventListener("pointerdown", e => {
+      if (!e.isPrimary || e.button !== 0 || (S.phase !== "setup" && S.phase !== "play")) return;
+      press = { s, el, id: e.pointerId }; el.classList.add("press");
+    });
+    el.addEventListener("click", e => { if (e.detail === 0) onCell(s); }); // keyboard / programmatic; pointer taps commit on pointerup
     $("board").appendChild(el); cells[s] = el;
   }
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 8 8"); svg.setAttribute("class", "path"); svg.id = "pathSvg";
   $("board").appendChild(svg);
 })();
+/* Press: highlight on down, commit on up, cancel if dragged away (10px slack), re-arm if dragged back */
+let press = null;
+const nearCell = (e, el, slack = 10) => {
+  const r = el.getBoundingClientRect();
+  return e.clientX >= r.left - slack && e.clientX <= r.right + slack && e.clientY >= r.top - slack && e.clientY <= r.bottom + slack;
+};
+document.addEventListener("pointermove", e => {
+  if (press && e.pointerId === press.id) press.el.classList.toggle("press", nearCell(e, press.el));
+});
+document.addEventListener("pointerup", e => {
+  if (!press || e.pointerId !== press.id) return;
+  const { s, el } = press; press = null;
+  el.classList.remove("press");
+  if (nearCell(e, el)) onCell(s);
+});
+document.addEventListener("pointercancel", e => {
+  if (!press || e.pointerId !== press.id) return;
+  press.el.classList.remove("press"); press = null;
+});
 const center = s => [(s % 8) + 0.5, 7 - (s >> 3) + 0.5];
 
 /* ---------- Rendering ---------- */
